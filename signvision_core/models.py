@@ -133,3 +133,5 @@ class GestureEntry(models.Model):
         return new_entry
 
 
+
+

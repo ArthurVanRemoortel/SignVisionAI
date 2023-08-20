@@ -89,6 +89,13 @@ class Coordinate:
         else:
             return Coordinate((self.x + other.x) / 2, (self.y + other.y) / 2, (self.z + other.z) / 2)
 
+    def to_json(self) -> {}:
+        return self.to_dict()
+
+    @classmethod
+    def from_json(cls, json_data: {}) -> 'Coordinate':
+        return cls.from_dict(json_data)
+
     def __add__(self, other: 'Coordinate') -> 'Coordinate':
         return Coordinate(self.x + other.x, self.y + other.y, self.z + other.z)
 
@@ -112,6 +119,7 @@ class HandFrame:
     RING_TIP: Coordinate
     PINKY_BASE: Coordinate
     PINKY_TIP: Coordinate
+
     @classmethod
     def empty(cls) -> 'HandFrame':
         return cls(*[Coordinate.empty()]*len(HandFrame.__annotations__))
@@ -146,6 +154,16 @@ class HandFrame:
         for field in HandFrame.__annotations__.keys():
             yield getattr(self, field)
 
+    def to_json(self) -> {}:
+        json_out = {}
+        for field in HandFrame.__annotations__.keys():
+            json_out[field] = getattr(self, field).to_dict()
+        return json_out
+
+    @classmethod
+    def from_json(cls, json_data: {}) -> 'HandFrame':
+        return cls(*[Coordinate.from_json(json_data[field]) for field in HandFrame.__annotations__.keys()])
+
 
 @dataclass
 class GestureFrame:
@@ -173,11 +191,25 @@ class GestureFrame:
         )
         return new_value
 
+    def to_json(self):
+        return {
+            "LEFT": self.LEFT.to_json(),
+            "RIGHT": self.RIGHT.to_json(),
+            "MOUTH": self.MOUTH.to_json(),
+        }
+
+    @classmethod
+    def from_json(cls, json_data: {}) -> 'GestureFrame':
+        return cls(
+            LEFT=HandFrame.from_json(json_data["LEFT"]),
+            RIGHT=HandFrame.from_json(json_data["RIGHT"]),
+            MOUTH=Coordinate.from_json(json_data["MOUTH"]),
+        )
+
 
 class GestureDatasetEntry:
-
-    def __init__(self, name: str):
-        self.frames = []
+    def __init__(self, name: None | str):
+        self.frames: [GestureFrame] = []
         self.name = name
 
     def add_frame(self, frame: GestureFrame):
@@ -196,6 +228,17 @@ class GestureDatasetEntry:
 
     def populated_rate(self) -> float:
         return len(self.populated_frames()) / len(self.frames)
+
+    def to_json(self):
+        return {frame_n: frame.to_json() for frame_n, frame in enumerate(self.frames)}
+
+    @classmethod
+    def from_json(cls, json_data: dict) -> 'GestureDatasetEntry':
+        entry = cls(name=None)
+        for frame_n, frame_json in json_data.items():
+            mouth = frame_json["MOUTH"]
+            entry.add_frame(GestureFrame.from_json(frame_json))
+        return entry
 
 
 def strip_empty_frames(frames: list[GestureFrame]) -> list[GestureFrame]:
@@ -242,7 +285,6 @@ def distance_to_mouth(frames: list[GestureFrame], hand_frame=None):
                             (landmark_value.z - average_mouth_pos.z),
                         )
                     )
-
             new_hand_frame = HandFrame(*new_frame_values)
             if hand_name == "LEFT":
                 new_left_hands = new_hand_frame
