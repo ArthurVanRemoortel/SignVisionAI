@@ -31,7 +31,7 @@ POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG_MODE")
+DEBUG = os.getenv("DEBUG_MODE") == "1"
 
 ALLOWED_HOSTS = ['*']
 
