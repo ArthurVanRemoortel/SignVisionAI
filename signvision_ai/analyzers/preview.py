@@ -45,28 +45,45 @@ square_entry.frames = [
         RIGHT=HandFrame(*[Coordinate.empty() for _ in range(HandFrame.__annotations__.__len__())]),
         MOUTH=Coordinate(0.5, 0.5, 0.5)
     ),
+    GestureFrame(
+        LEFT=HandFrame(*[Coordinate(0.5, 0.5, 0.5) for _ in range(HandFrame.__annotations__.__len__())]),
+        RIGHT=HandFrame(*[Coordinate.empty() for _ in range(HandFrame.__annotations__.__len__())]),
+        MOUTH=Coordinate(0.5, 0.5, 0.5)
+    ),
+    GestureFrame(
+        LEFT=HandFrame(*[Coordinate(0.2, 0.2, 0.2) for _ in range(HandFrame.__annotations__.__len__())]),
+        RIGHT=HandFrame(*[Coordinate.empty() for _ in range(HandFrame.__annotations__.__len__())]),
+        MOUTH=Coordinate(0.5, 0.5, 0.5)
+    ),
 ]
 gestures = [None]
 gestures = Gesture.objects.filter(Q(word__language=VGT) & Q(word__word__icontains="hallo")).prefetch_related('dataset').all()
+
+RED_COLOR = (0, 0, 255)
+BLUE_COLOR = (255, 0, 0)
 
 
 def preview_entry(gesture_dataset_entry: GestureDatasetEntry):
     do_exit = False
     background = 255 * np.ones((window_height, window_width, 3), dtype=np.uint8)
+    background = background[:, :, ::-1]
     frame: GestureFrame
     for i, frame in enumerate(gesture_dataset_entry.frames):
         image = background.copy()
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         for hand_name in ['LEFT', 'RIGHT']:
             hand_frame: HandFrame = frame.__getattribute__(hand_name)
-            color = (0, 0, 255) if hand_name == 'RIGHT' else (255, 0, 0)
             if hand_frame.is_empty():
                 continue
+            color = RED_COLOR if hand_name == 'RIGHT' else BLUE_COLOR
+            # if hand_name == 'LEFT':
+            #     print(i)
             for landmark_name in hand_frame.__annotations__.keys():
                 landmark_value = hand_frame.__getattribute__(landmark_name)
                 # print(landmark_value.x, landmark_value.y)
                 center = (int(landmark_value.x * window_width), int(landmark_value.y * window_height))
                 cv2.circle(image, center, 10 if 'TIP' not in landmark_name else 4, color,
-                           -1)  # Draw a red circle at the coordinate
+                           -1)
 
             for p1, p2 in [(hand_frame.WRIST, hand_frame.THUMB_BASE),
                            (hand_frame.WRIST, hand_frame.PINKY_BASE)]:
@@ -105,11 +122,15 @@ if __name__ == '__main__':
     do_exit = False
     while not do_exit:
         for gesture in gestures:
-            gesture_entry: GestureEntry = gesture.dataset.all().first()
-            # gesture_dataset_entry: GestureDatasetEntry = square_entry  # gesture_entry.to_gesture_dataset_entry()
-            gesture_dataset_entry: GestureDatasetEntry = gesture_entry.to_gesture_dataset_entry()
-            gesture_dataset_entry.prepare()
-            do_exit = preview_entry(gesture_dataset_entry)
+            gesture_entry: GestureEntry
+            for gesture_entry in gesture.dataset.all():
+                # gesture_entry: GestureEntry = gesture.dataset.all().first()
+                # gesture_dataset_entry: GestureDatasetEntry = square_entry  # gesture_entry.to_gesture_dataset_entry()
+                gesture_dataset_entry: GestureDatasetEntry = gesture_entry.to_gesture_dataset_entry()
+                gesture_dataset_entry.prepare()
+                do_exit = preview_entry(gesture_dataset_entry)
+                if do_exit:
+                    break
         if do_exit:
             break
 

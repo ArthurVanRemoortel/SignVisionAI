@@ -14,7 +14,7 @@ from mediapipe.framework.formats import landmark_pb2
 import numpy as np
 
 from signvision_ai.analyzers.video_analysis import read_video_frames, create_gesture_frame
-from signvision_ai.dataset import process_hand_openness, GestureDatasetEntry
+from signvision_ai.dataset import process_hand_openness, GestureDatasetEntry, process_hand_orientation
 
 MediapipeBaseOptions = mp.tasks.BaseOptions
 MediapipeHandLandmarker = mp.tasks.vision.HandLandmarker
@@ -26,7 +26,7 @@ MediapipeFaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
 MARGIN = 10  # pixels
 FONT_SIZE = 1
 FONT_THICKNESS = 1
-HANDEDNESS_TEXT_COLOR = (88, 205, 54) # vibrant green
+HANDEDNESS_TEXT_COLOR = (88, 205, 54)  # vibrant green
 
 
 def draw_landmarks_on_image(rgb_image, detection_result):
@@ -104,7 +104,7 @@ if __name__ == '__main__':
             mp_frame = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
             hand_landmarker_result = hands_landmarker.detect_for_video(mp_frame, timestamp_ms)
             face_landmarker_result = face_landmarker.detect_for_video(mp_frame, timestamp_ms)
-            # frame = draw_landmarks_on_image(frame, hand_landmarker_result)
+            frame = draw_landmarks_on_image(frame, hand_landmarker_result)
             if hand_landmarker_result.hand_landmarks:# and face_landmarker_result.face_landmarks:
                 time_without_hand = 0
                 gesture_frame = create_gesture_frame(
@@ -113,11 +113,24 @@ if __name__ == '__main__':
                     right=True
                 )
                 gesture_data.add_frame(gesture_frame)
+
+                left_sin = process_hand_orientation([gesture_frame.LEFT])[0]
+                right_sin = process_hand_orientation([gesture_frame.RIGHT])[0]
+                # print(right_sin)
+                cv2.putText(frame, f"L: {left_sin[0]:.2f}",
+                            (20, 20), cv2.FONT_HERSHEY_DUPLEX,
+                            FONT_SIZE, HANDEDNESS_TEXT_COLOR, FONT_THICKNESS, cv2.LINE_AA)
+                cv2.putText(frame, f"R: {right_sin[0]:.2f}",
+                            (20, 40), cv2.FONT_HERSHEY_DUPLEX,
+                            FONT_SIZE, HANDEDNESS_TEXT_COLOR, FONT_THICKNESS, cv2.LINE_AA)
+
             else:
                 time_without_hand += (1.0 / fps)
 
+
             if time_without_hand >= 1:
                 if len(gesture_data.frames) > 3:
+                    # url = "http://192.168.50.103:8090/api/classify_gesture/"
                     url = "http://localhost:8000/api/classify_gesture/"
                     data = {
                         "language": "VGT",
@@ -131,8 +144,6 @@ if __name__ == '__main__':
                         print('Request failed')
                         print('Response status code:', response.status_code)
                         print('Response content:', response.text)
-
-
                 time_without_hand = 0
                 gesture_data = GestureDatasetEntry(name="preview")
 
