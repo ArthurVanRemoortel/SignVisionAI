@@ -7,7 +7,7 @@ from tqdm import tqdm
 from signvision_ai.models.gesture_model import GestureModel
 from signvision_core.models import Country, SignLanguage, Word, Gesture, Hands
 from signvision_ai.dataset import GestureDatasetEntry, GestureFrame, Coordinate, HandFrame, GestureDataset, \
-    process_hand_orientation, replace_nulls, process_hand_openness
+    process_hand_orientation, replace_nulls, process_hand_openness, distance_to_mouth, format_entry_task
 
 MIN_GESTURE_DATASET_SIZE = 5
 
@@ -28,7 +28,7 @@ class GestureClassifier:
             print(f"Failed to load model for {self.sign_language.abbreviation}: {e}. Will train a new one instead.")
             self.load_dataset_entries()
             self.gesture_dataset.format_data(entry_lookup_dict=self.entry_lookup_dict)
-            self.gesture_model.train_model(validate=True)
+            self.gesture_model.train_model(validate=False)
             self.gesture_model.save_model()
 
     def load_metadata(self) -> GestureDataset:
@@ -59,30 +59,12 @@ class GestureClassifier:
                 self.entry_lookup_dict[gesture_dataset_entry.name] = gesture_id
 
     def classify(self, entry: GestureDatasetEntry):
-        entry.prepare()
-        left_hand_orientations = process_hand_orientation([frame.LEFT for frame in entry.frames])
-        right_hand_orientations = process_hand_orientation([frame.RIGHT for frame in entry.frames])
-        x_data = [
-            replace_nulls([frame.LEFT.WRIST.z for frame in entry.frames]),
-            replace_nulls([frame.RIGHT.WRIST.z for frame in entry.frames]),
-            replace_nulls([frame.LEFT.WRIST.x for frame in entry.frames]),
-            replace_nulls([frame.LEFT.WRIST.y for frame in entry.frames]),
-            replace_nulls([frame.RIGHT.WRIST.x for frame in entry.frames]),
-            replace_nulls([frame.RIGHT.WRIST.y for frame in entry.frames]),
-            replace_nulls([frame.LEFT.MIDDLE_TIP.x for frame in entry.frames]),
-            replace_nulls([frame.LEFT.MIDDLE_TIP.y for frame in entry.frames]),
-            replace_nulls([frame.RIGHT.MIDDLE_TIP.x for frame in entry.frames]),
-            replace_nulls([frame.RIGHT.MIDDLE_TIP.y for frame in entry.frames]),
-            *left_hand_orientations,
-            *right_hand_orientations,
-            *process_hand_openness([frame.LEFT for frame in entry.frames]),
-            *process_hand_openness([frame.RIGHT for frame in entry.frames]),
-        ]
+        entry, x_data = format_entry_task(entry)
         prediction = self.gesture_model.model.predict([x_data])
         predicted_gestures = {}
         for gesture_id, prediction in enumerate(prediction[0]):
             prediction = int(prediction * 100)
-            if prediction > 10:
+            if prediction > 5:
                 try:
                     predicted_gestures[
                         self.lookup_dict[gesture_id]

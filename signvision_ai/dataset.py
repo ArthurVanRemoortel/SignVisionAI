@@ -15,16 +15,28 @@ def format_entry_task(entry: 'GestureDatasetEntry') -> ('GestureDatasetEntry', l
     right_hand_orientations = process_hand_orientation([frame.RIGHT for frame in entry.frames])
     entry.frames = distance_to_mouth(entry.frames)
     x_data = [
-        replace_nulls([frame.LEFT.WRIST.z for frame in entry.frames]),
-        replace_nulls([frame.RIGHT.WRIST.z for frame in entry.frames]),
+        # replace_nulls([frame.LEFT.WRIST.z for frame in dataset_entry.frames]),
+        # replace_nulls([frame.RIGHT.WRIST.z for frame in dataset_entry.frames]),
         replace_nulls([frame.LEFT.WRIST.x for frame in entry.frames]),
         replace_nulls([frame.LEFT.WRIST.y for frame in entry.frames]),
         replace_nulls([frame.RIGHT.WRIST.x for frame in entry.frames]),
         replace_nulls([frame.RIGHT.WRIST.y for frame in entry.frames]),
+
         replace_nulls([frame.LEFT.MIDDLE_TIP.x for frame in entry.frames]),
         replace_nulls([frame.LEFT.MIDDLE_TIP.y for frame in entry.frames]),
         replace_nulls([frame.RIGHT.MIDDLE_TIP.x for frame in entry.frames]),
         replace_nulls([frame.RIGHT.MIDDLE_TIP.y for frame in entry.frames]),
+
+        replace_nulls([frame.LEFT.THUMB_TIP.x for frame in entry.frames]),
+        replace_nulls([frame.LEFT.THUMB_TIP.y for frame in entry.frames]),
+        replace_nulls([frame.RIGHT.THUMB_TIP.x for frame in entry.frames]),
+        replace_nulls([frame.RIGHT.THUMB_TIP.y for frame in entry.frames]),
+
+        replace_nulls([frame.LEFT.PINKY_TIP.x for frame in entry.frames]),
+        replace_nulls([frame.LEFT.PINKY_TIP.y for frame in entry.frames]),
+        replace_nulls([frame.RIGHT.PINKY_TIP.x for frame in entry.frames]),
+        replace_nulls([frame.RIGHT.PINKY_TIP.y for frame in entry.frames]),
+
         *left_hand_orientations,
         *right_hand_orientations,
         *process_hand_openness([frame.LEFT for frame in entry.frames]),
@@ -100,6 +112,8 @@ class Coordinate:
         return Coordinate(self.x + other.x, self.y + other.y, self.z + other.z)
 
     def __sub__(self, other: 'Coordinate') -> 'Coordinate':
+        if not self.x or not other.x or not self.y or not other.y or not self.z or not other.z:
+            raise Exception("Cannot subtract empty coordinates")
         return Coordinate(self.x - other.x, self.y - other.y, self.z - other.z)
 
     def __truediv__(self, value: float | int) -> 'Coordinate':
@@ -211,16 +225,27 @@ class GestureDatasetEntry:
     def __init__(self, name: None | str):
         self.frames: [GestureFrame] = []
         self.name = name
+        self.is_prepared = False
 
     def add_frame(self, frame: GestureFrame):
         self.frames.append(frame)
 
-    def prepare(self, mouth_distance=True):
+    def prepare(self):
+        if self.is_prepared:
+            print("Warning: Prepared the same GestureDatasetEntry twice.")
+            return
         self.frames = strip_empty_frames(self.frames)
+        if len(self.frames) >= 50:
+            self.frames = self.frames[5:-5]
+        # self.frames = remove_outliers(self.frames)
+        if len(self.frames) > 20:
+            self.frames = remove_lonely_hands(self.frames)
+
         self.frames = normalize_length(self.frames, 100)
         self.frames = interpolate_empty_frames(self.frames)
         # if mouth_distance:
         #     self.frames = distance_to_mouth(self.frames)
+        self.is_prepared = True
 
     def populated_frames(self) -> list[GestureFrame]:
         empty_frame = GestureFrame.empty()
@@ -241,10 +266,65 @@ class GestureDatasetEntry:
         return entry
 
 
+def remove_lonely_hands(frames: list[GestureFrame]) -> list[GestureFrame]:
+    new_frames = []
+    prev_frame: GestureFrame = GestureFrame.empty()
+    for i, frame in enumerate(frames):
+        next_frame = frames[i + 1] if i < len(frames) - 1 else None
+        next_next_frame = frames[i + 2] if i < len(frames) - 2 else None
+        next_next_next_frame = frames[i + 3] if i < len(frames) - 3 else None
+        bad_frame = False
+        for hand_name in ['LEFT', 'RIGHT']:
+            hand = frame.__getattribute__(hand_name)
+            if next_frame and next_next_frame and next_next_next_frame:
+                if not hand.is_empty() and prev_frame.__getattribute__(hand_name).is_empty():
+                    # Left hand appeared.
+                    # Check if it disappears in the next frame.
+                    if next_frame.__getattribute__(hand_name).is_empty() or next_next_frame.__getattribute__(hand_name).is_empty() or next_next_next_frame.__getattribute__(hand_name).is_empty():
+                        # hand appeared for 1 frame.
+                        bad_frame = True
+            else:
+                if prev_frame.__getattribute__(hand_name).is_empty():
+                    bad_frame = True
+
+        if not bad_frame:
+            new_frames.append(frame)
+            prev_frame = frame
+        else:
+            # print(f"Frame {i} is a bad frame.")
+            prev_frame = GestureFrame.empty()
+    return new_frames
+
+
+def remove_outliers(frames: list[GestureFrame]) -> list[GestureFrame]:
+    new_frames = []
+    prev_left: HandFrame = HandFrame.empty()
+    prev_right: HandFrame = HandFrame.empty()
+    frame: GestureFrame
+    for frame_n, frame in enumerate(frames):
+        overlapping_hands_oks: [bool] = []
+        for landmark_name in HandFrame.__annotations__.keys():
+            ll: Coordinate = frame.LEFT.__getattribute__(landmark_name)
+            rl: Coordinate = frame.RIGHT.__getattribute__(landmark_name)
+            if ll.is_empty() or rl.is_empty():
+                overlapping_hands_oks.append(True)
+                continue
+
+            # Check if hands are overlapping.
+            if abs(ll.x - rl.x) > 0.02 and abs(ll.y - rl.y) > 0.02:
+                overlapping_hands_oks.append(True)
+            else:
+                overlapping_hands_oks.append(False)
+        if any(overlapping_hands_oks):
+            new_frames.append(frame)
+        else:
+            print("Skipping overlapping bad frame: ", frame_n)
+    return new_frames
+
 def strip_empty_frames(frames: list[GestureFrame]) -> list[GestureFrame]:
     new_frames = []
     for frame in frames:
-        if not frame.LEFT.WRIST.is_empty() or not frame.RIGHT.WRIST.is_empty():
+        if not frame.LEFT.is_empty() or not frame.RIGHT.is_empty():
             new_frames.append(frame)
     return new_frames
 
@@ -392,21 +472,23 @@ def calculate_angle(x0: float, y0: float, x1: float, y1: float) -> float:
 
 def process_hand_orientation(hand_frames: [HandFrame]) -> [float]:
     angles = []
-    prev_angle = 0
+    prev_angle = None
     hand: HandFrame
     for hand in hand_frames:
         base = hand.WRIST
         tip = hand.MIDDLE_TIP
         if base.is_empty():
-            angles.append(prev_angle)
+            angles.append(0 if not prev_angle else prev_angle)
             continue
-        angle = calculate_angle(base.x, base.y, tip.x, tip.y)
+        angle = calculate_angle(base.x, base.y, tip.x, tip.y) + 90
+        if angle > 360:
+            angle -= 360
         angles.append(angle)
         prev_angle = angle
-    angles_rad = np.radians(angles)  # Convert to radians
-    sines = np.sin(angles_rad)
-    cosines = np.cos(angles_rad)
-    return [sines, cosines]
+    # angles_rad = np.radians(angles)  # Convert to radians
+    # sines = np.sin(angles_rad)
+    # cosines = np.cos(angles_rad)
+    return [angles]
 
 
 def process_hand_openness(hand_frames: [HandFrame]) -> [[float]]:

@@ -100,13 +100,13 @@ class GestureModel:
                     32,
                     input_shape=(x_train.shape[1], x_train.shape[2]),
                     return_sequences=True,
-                    kernel_regularizer=L2(0.001),
+                    kernel_regularizer=L2(0.01),
                 ),
-                tf.keras.layers.Dropout(0.2),
+                tf.keras.layers.Dropout(0.25),
                 tf.keras.layers.LSTM(
-                    64, return_sequences=False, kernel_regularizer=L2(0.001)
+                    64, return_sequences=False, kernel_regularizer=L2(0.01)
                 ),
-                tf.keras.layers.Dropout(0.2),
+                tf.keras.layers.Dropout(0.25),
                 tf.keras.layers.Dense(num_classes, activation="softmax"),
             ]
         )
@@ -115,7 +115,7 @@ class GestureModel:
             loss="sparse_categorical_crossentropy",  # Experiment using different loss and metric functions.
             metrics=["sparse_categorical_accuracy"],
         )
-        es_callback = tf.keras.callbacks.EarlyStopping(patience=20, verbose=1, monitor='val_loss' if validate else 'loss')
+        es_callback = tf.keras.callbacks.EarlyStopping(patience=30, verbose=1, monitor='val_loss' if validate else 'loss')
         train_history = model.fit(
             x_train,
             y_train,
@@ -133,11 +133,11 @@ class GestureModel:
     def load_model(self):
         if not self.model_path.exists():
             raise Exception(f"Model file {self.model_path} does not exist.")
-        self.model = load_model(self.model_path, custom_objects={'F1ScoreMetric': F1ScoreMetric})
+        self.model = load_model(self.model_path)
 
     def save_model(self):
         save_model(self.model, self.model_path)
 
     @property
     def model_path(self) -> Path:
-        return MODELS_ROOT / (self.language.abbreviation + '-gesture.tf')
+        return MODELS_ROOT / (self.language.abbreviation + '-gesture.h5')
