@@ -7,6 +7,8 @@ ENV PYTHONUNBUFFERED 1
 
 # Set the working directory
 WORKDIR /code
+ADD ./requirements.txt /code/requirements.txt
+RUN pip install -r requirements.txt
 
 # Creating folders, and files for a project:
 COPY . /code

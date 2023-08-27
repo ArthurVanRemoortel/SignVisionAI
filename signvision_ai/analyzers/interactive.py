@@ -131,7 +131,8 @@ if __name__ == '__main__':
             if time_without_hand >= 1:
                 if len(gesture_data.frames) > 3:
                     # url = "http://192.168.50.103:8090/api/classify_gesture/"
-                    url = "http://localhost:8000/api/classify_gesture/"
+                    url = "http://signvision.arthurvanremoortel.me/api/classify_gesture/"
+                    #url = "http://localhost:8000/api/classify_gesture/"
                     data = {
                         "language": "VGT",
                         "gesture": gesture_data.to_json(),
